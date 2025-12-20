@@ -10,7 +10,7 @@ const admin = require("firebase-admin");
 const serviceAccount = require("./read-on-route-firebase-adminsdk.json");
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert(serviceAccount)
 });
 
 
@@ -36,7 +36,7 @@ app.use(cors())
 
 const verifyFBToken = async (req, res, next) => {
     const token = req.headers.authorization;
-   
+
     if (!token) {
         return res.status(401).send({ message: 'unauthorized access' })
     }
@@ -183,7 +183,7 @@ async function run() {
         app.get('/payments', verifyFBToken, async (req, res) => {
             const email = req.query.email;
             const query = {}
-            
+
 
             if (email) {
                 query.customerEmail = email;
@@ -205,11 +205,6 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/orders', async (req, res) => {
-            const cursor = OrdersCollection.find();
-            const result = await cursor.toArray();
-            res.send(result)
-        })
 
         app.patch('/orders/:id', async (req, res) => {
             const id = req.params.id;
@@ -224,20 +219,20 @@ async function run() {
             res.send(result)
         })
 
-        app.get('/orders', async (req, res) => {
-            const query = {}
-            const { email } = req.query;
+        app.get('/orders', verifyFBToken, async (req, res) => {
+            const email = req.query.email;
 
-            if (email) {
-                query.email = email;
+            if (email !== req.decoded_email) {
+                return res.status(403).send({ message: 'forbidden access' });
             }
 
-            const options = { sort: { createdAt: -1 } }
+            const query = { email };
+            const options = { sort: { orderedAt: -1 } };
 
-            const cursor = OrdersCollection.find(query, options);
-            const result = await cursor.toArray();
+            const result = await OrdersCollection.find(query, options).toArray();
             res.send(result);
-        })
+        });
+
 
 
         app.get('/orders/:id', async (req, res) => {
@@ -252,25 +247,56 @@ async function run() {
 
         //books api
 
-        app.patch('/AllBooks/:id',async(req,res)=>{
-            const id = req.params.id;
-            const { status } = req.body;
-            const query = { _id: new ObjectId(id) }
-            const update = {
-                $set: {
-                    status: status
-                }
+        app.patch('/AllBooks/:id', verifyFBToken, async (req, res) => {
+            const email = req.decoded_email;
+            const user = await UserCollection.findOne({ email });
+
+            if (!user || (user.role !== 'admin' && user.role !== 'librarian')) {
+                return res.status(403).send({ message: 'forbidden access' });
             }
-            const result = await BooksCollection.updateOne(query, update)
-            res.send(result)
-        })
 
-        app.get('/AllBooks', async (req, res) => {
-            const cursor = BooksCollection.find()
-            const result = await cursor.toArray();
-            res.send(result)
+            const id = req.params.id;
+            const updatedBook = req.body;
+            const query = { _id: new ObjectId(id) }
+            const update = { $set: updatedBook }
 
-        })
+            const result = await BooksCollection.updateOne(query, update);
+            res.send(result);
+        });
+
+
+
+
+        app.get('/AllBooks', verifyFBToken, async (req, res) => {
+            const email = req.decoded_email;
+
+            const user = await UserCollection.findOne({ email });
+
+            if (!user) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+
+            let query = {};
+            const options = { sort: { createdAt: -1 } };
+
+            // Librarian → only their books
+            if (user.role === 'librarian') {
+                query = { librarianEmail: email };
+            }
+
+            // Admin → ALL books (query stays empty)
+            if (user.role === 'admin') {
+                query = {};
+            }
+
+            const result = await BooksCollection.find(query, options).toArray();
+            res.send(result);
+        });
+
+
+
+
+
 
 
         app.get('/AllBooks/:id', async (req, res) => {
@@ -281,9 +307,20 @@ async function run() {
         })
 
 
-        app.delete('/AllBooks/:id',async(req,res)=>{
+        app.post('/AllBooks', verifyFBToken, async (req, res) => {
+            const book = req.body;
+
+            if (book.email !== req.decoded_email) {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+            const result = await BooksCollection.insertOne(book);
+            res.send(result)
+        })
+
+
+        app.delete('/AllBooks/:id', async (req, res) => {
             const id = req.params.id;
-            const query = {_id: new ObjectId(id)}
+            const query = { _id: new ObjectId(id) }
             const result = await BooksCollection.deleteOne(query)
             res.send(result);
         })
@@ -307,7 +344,7 @@ async function run() {
         })
 
 
-        app.get('/users', async(req,res)=>{
+        app.get('/users', async (req, res) => {
             const cursor = UserCollection.find()
             const result = await cursor.toArray()
             res.send(result)

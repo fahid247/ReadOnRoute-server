@@ -7,7 +7,7 @@ const crypto = require("crypto");
 
 const admin = require("firebase-admin");
 
-const serviceAccount = require("./read-on-route-firebase-adminsdk-fbsvc-3945df2dd3.json");
+const serviceAccount = require("./read-on-route-firebase-adminsdk.json");
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)

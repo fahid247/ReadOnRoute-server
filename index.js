@@ -5,6 +5,15 @@ const app = express()
 const port = process.env.PORT || 3000
 const crypto = require("crypto");
 
+const admin = require("firebase-admin");
+
+const serviceAccount = require("./read-on-route-firebase-adminsdk-fbsvc-3945df2dd3.json");
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+
 function generateTrackingId() {
     const prefix = "PRCL"; // your brand prefix
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
@@ -25,9 +34,9 @@ app.use(express.json())
 app.use(cors())
 
 
-/*const verifyFBToken = async (req, res, next) => {
+const verifyFBToken = async (req, res, next) => {
     const token = req.headers.authorization;
-
+   
     if (!token) {
         return res.status(401).send({ message: 'unauthorized access' })
     }
@@ -44,7 +53,7 @@ app.use(cors())
     }
 
 
-}*/
+}
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.rpcowue.mongodb.net/?appName=Cluster0`;
 
@@ -117,7 +126,7 @@ async function run() {
             const transactionId = session.payment_intent;
             const query = { transactionId: transactionId }
 
-            const paymentExist = await paymentCollection.findOne(query);
+            const paymentExist = await PaymentCollection.findOne(query);
             console.log(paymentExist);
             if (paymentExist) {
 
@@ -171,16 +180,17 @@ async function run() {
 
         })
 
-        app.get('/payments', async (req, res) => {
-            const email = req.body;
+        app.get('/payments', verifyFBToken, async (req, res) => {
+            const email = req.query.email;
             const query = {}
+            
 
             if (email) {
                 query.customerEmail = email;
 
-                /*if (email !== req.decoded_email) {
+                if (email !== req.decoded_email) {
                     return res.status(403).send({ message: 'forbidden access' })
-                }*/
+                }
             }
             const cursor = PaymentCollection.find(query).sort({ paidAt: -1 });
             const result = await cursor.toArray();
@@ -241,6 +251,20 @@ async function run() {
 
 
         //books api
+
+        app.patch('/AllBooks/:id',async(req,res)=>{
+            const id = req.params.id;
+            const { status } = req.body;
+            const query = { _id: new ObjectId(id) }
+            const update = {
+                $set: {
+                    status: status
+                }
+            }
+            const result = await BooksCollection.updateOne(query, update)
+            res.send(result)
+        })
+
         app.get('/AllBooks', async (req, res) => {
             const cursor = BooksCollection.find()
             const result = await cursor.toArray();
@@ -253,6 +277,14 @@ async function run() {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await BooksCollection.findOne(query);
+            res.send(result);
+        })
+
+
+        app.delete('/AllBooks/:id',async(req,res)=>{
+            const id = req.params.id;
+            const query = {_id: new ObjectId(id)}
+            const result = await BooksCollection.deleteOne(query)
             res.send(result);
         })
 
@@ -271,6 +303,28 @@ async function run() {
                 return res.send({ message: 'user already exists' })
             }
             const result = await UserCollection.insertOne(user);
+            res.send(result)
+        })
+
+
+        app.get('/users', async(req,res)=>{
+            const cursor = UserCollection.find()
+            const result = await cursor.toArray()
+            res.send(result)
+        })
+
+
+
+        app.patch('/users/role/:id', async (req, res) => {
+            const id = req.params.id;
+            const { role } = req.body;
+            const query = { _id: new ObjectId(id) }
+            const update = {
+                $set: {
+                    role: role
+                }
+            }
+            const result = await UserCollection.updateOne(query, update)
             res.send(result)
         })
 

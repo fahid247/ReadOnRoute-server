@@ -80,7 +80,17 @@ async function run() {
 
 
 
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded_email;
+            const query = { email };
+            const user = await UserCollection.findOne(query);
 
+            if (!user || user.role !== 'admin') {
+                return res.status(403).send({ message: 'forbidden access' });
+            }
+
+            next();
+        }
 
 
 
@@ -118,7 +128,7 @@ async function run() {
 
         const trackingId = generateTrackingId()
 
-        app.patch('/payment-success', async (req, res) => {
+        app.patch('/payment-success',verifyFBToken, async (req, res) => {
             const sessionId = req.query.session_id;
             const session = await stripe.checkout.sessions.retrieve(sessionId);
             //console.log(session)
@@ -316,7 +326,7 @@ async function run() {
 
 
 
-        app.get('/AllBooks/:id', async (req, res) => {
+        app.get('/AllBooks/:id',verifyFBToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await BooksCollection.findOne(query);
@@ -335,7 +345,7 @@ async function run() {
         })
 
 
-        app.delete('/AllBooks/:id', async (req, res) => {
+        app.delete('/AllBooks/:id', verifyFBToken,verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await BooksCollection.deleteOne(query)
@@ -361,14 +371,14 @@ async function run() {
         })
 
 
-        app.get('/users', async (req, res) => {
+        app.get('/users',verifyFBToken,verifyAdmin, async (req, res) => {
             const cursor = UserCollection.find()
             const result = await cursor.toArray()
             res.send(result)
         })
 
 
-        app.get('/users/:email/role', async (req, res) => {
+        app.get('/users/:email/role',verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const query = { email }
             const user = await UserCollection.findOne(query);
@@ -376,7 +386,7 @@ async function run() {
         })
 
 
-        app.patch('/users/role/:id', async (req, res) => {
+        app.patch('/users/role/:id',verifyFBToken, verifyAdmin , async (req, res) => {
             const id = req.params.id;
             const { role } = req.body;
             const query = { _id: new ObjectId(id) }

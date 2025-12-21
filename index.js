@@ -127,7 +127,7 @@ async function run() {
             const query = { transactionId: transactionId }
 
             const paymentExist = await PaymentCollection.findOne(query);
-            console.log(paymentExist);
+            // console.log(paymentExist);
             if (paymentExist) {
 
                 return res.send({
@@ -233,6 +233,16 @@ async function run() {
             res.send(result);
         });
 
+        app.get('/orders/:librarianEmail/status', async (req, res) => {
+            const librarianEmail = req.params.librarianEmail;
+
+            const query = { librarianEmail };
+            const orders = await OrdersCollection.find(query).toArray();
+
+            res.send(orders);
+        });
+
+
 
 
         app.get('/orders/:id', async (req, res) => {
@@ -294,8 +304,15 @@ async function run() {
         });
 
 
-
-
+        app.get('/public/books', async (req, res) => {
+            try {
+                const options = { sort: { createdAt: -1 } };
+                const books = await BooksCollection.find({}, options).toArray();
+                res.send(books);
+            } catch (error) {
+                res.status(500).send({ message: 'Failed to load books' });
+            }
+        });
 
 
 
@@ -350,6 +367,13 @@ async function run() {
             res.send(result)
         })
 
+
+        app.get('/users/:email/role', async (req, res) => {
+            const email = req.params.email;
+            const query = { email }
+            const user = await UserCollection.findOne(query);
+            res.send({ role: user?.role || 'user' })
+        })
 
 
         app.patch('/users/role/:id', async (req, res) => {

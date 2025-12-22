@@ -84,7 +84,7 @@ async function run() {
         const BooksCollection = db.collection('AllBooks');
         const OrdersCollection = db.collection('orders');
         const PaymentCollection = db.collection('payments');
-        const wishCollection =db.collection('wish')
+        const wishCollection = db.collection('wish')
 
 
 
@@ -104,14 +104,14 @@ async function run() {
 
         //wish api 
 
-        app.post('/wishList',async(req,res)=>{
+        app.post('/wishList', async (req, res) => {
             const wish = req.body;
             const result = await wishCollection.insertOne(wish);
             res.send(result)
         })
 
 
-        app.get('/myWishList/:email',async(req,res)=>{
+        app.get('/myWishList/:email', async (req, res) => {
             const email = req.params.email;
             const query = { email };
             const result = await wishCollection.find(query).toArray();
@@ -151,58 +151,58 @@ async function run() {
             res.send({ url: session.url })
         })
 
-        
-
-        app.patch('/payment-success',verifyFBToken, async (req, res) => {
-            try{
-                        const sessionId = req.query.session_id;
-            const session = await stripe.checkout.sessions.retrieve(sessionId);
-            //console.log(session)
-
-            const transactionId = session.payment_intent;
-            const query = { transactionId: transactionId }
-
-            const paymentExist = await PaymentCollection.findOne(query);
-             console.log(paymentExist);
-            if (paymentExist) {
-
-                return res.send({
-                    message: 'already exists',
-                    transactionId,
-                    trackingId: paymentExist.trackingId
-                })
-            }
 
 
-            
-            if (session.payment_status === 'paid') {
-                const id = session.metadata.orderId;
-                const query = { _id: new ObjectId(id) }
-                const order = await OrdersCollection.findOne(query);
-                const update = {
-                    $set: {
-                        paymentStatus: 'paid',
-                        trackingId: order.trackingId
+        app.patch('/payment-success', verifyFBToken, async (req, res) => {
+            try {
+                const sessionId = req.query.session_id;
+                const session = await stripe.checkout.sessions.retrieve(sessionId);
+                //console.log(session)
 
+                const transactionId = session.payment_intent;
+                const query = { transactionId: transactionId }
+
+                const paymentExist = await PaymentCollection.findOne(query);
+                console.log(paymentExist);
+                if (paymentExist) {
+
+                    return res.send({
+                        message: 'already exists',
+                        transactionId,
+                        trackingId: paymentExist.trackingId
+                    })
+                }
+
+
+
+                if (session.payment_status === 'paid') {
+                    const id = session.metadata.orderId;
+                    const query = { _id: new ObjectId(id) }
+                    const order = await OrdersCollection.findOne(query);
+                    const update = {
+                        $set: {
+                            paymentStatus: 'paid',
+                            trackingId: order.trackingId
+
+                        }
                     }
-                }
 
-                const result = await OrdersCollection.updateOne(query, update);
-                
-
-                const payment = {
-                    amount: session.amount_total / 100,
-                    currency: session.currency,
-                    customerEmail: session.customer_email,
-                    orderId: session.metadata.orderId,
-                    orderName: session.metadata.orderName,
-                    transactionId: session.payment_intent,
-                    paymentStatus: session.payment_status,
-                    paidAt: new Date(),
-                }
+                    const result = await OrdersCollection.updateOne(query, update);
 
 
-                
+                    const payment = {
+                        amount: session.amount_total / 100,
+                        currency: session.currency,
+                        customerEmail: session.customer_email,
+                        orderId: session.metadata.orderId,
+                        orderName: session.metadata.orderName,
+                        transactionId: session.payment_intent,
+                        paymentStatus: session.payment_status,
+                        paidAt: new Date(),
+                    }
+
+
+
                     const resultPayment = await PaymentCollection.insertOne(payment)
                     res.send({
                         success: true,
@@ -210,13 +210,13 @@ async function run() {
                         trackingId: order?.trackingId,
                         paymentInfo: resultPayment
                     })
-                
 
 
+
+                }
+                res.send({ success: false })
             }
-            res.send({ success: false })
-            }
-            catch(error){
+            catch (error) {
                 console.log(error)
             }
 
@@ -244,7 +244,7 @@ async function run() {
         app.post('/orders', async (req, res) => {
             const order = req.body;
             const trackingId = generateTrackingId();
-            order.trackingId= trackingId;
+            order.trackingId = trackingId;
             const result = await OrdersCollection.insertOne(order);
             res.send(result)
         })
@@ -360,7 +360,7 @@ async function run() {
 
 
 
-        app.get('/AllBooks/:id',verifyFBToken, async (req, res) => {
+        app.get('/AllBooks/:id', verifyFBToken, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await BooksCollection.findOne(query);
@@ -369,17 +369,22 @@ async function run() {
 
 
         app.post('/AllBooks', verifyFBToken, async (req, res) => {
-            const book = req.body;
+            const email = req.decoded_email;
+            const user = await UserCollection.findOne({ email });
 
-            if (book.email !== req.decoded_email) {
+            if (!user || (user.role !== 'librarian')) {
                 return res.status(403).send({ message: 'forbidden access' });
             }
+
+            const book = req.body;
+
             const result = await BooksCollection.insertOne(book);
-            res.send(result)
-        })
+            res.send(result);
+        });
 
 
-        app.delete('/AllBooks/:id', verifyFBToken,verifyAdmin, async (req, res) => {
+
+        app.delete('/AllBooks/:id', verifyFBToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await BooksCollection.deleteOne(query)
@@ -405,14 +410,14 @@ async function run() {
         })
 
 
-        app.get('/users',verifyFBToken,verifyAdmin, async (req, res) => {
+        app.get('/users', verifyFBToken, verifyAdmin, async (req, res) => {
             const cursor = UserCollection.find()
             const result = await cursor.toArray()
             res.send(result)
         })
 
 
-        app.get('/users/:email/role',verifyFBToken, async (req, res) => {
+        app.get('/users/:email/role', verifyFBToken, async (req, res) => {
             const email = req.params.email;
             const query = { email }
             const user = await UserCollection.findOne(query);
@@ -420,7 +425,7 @@ async function run() {
         })
 
 
-        app.patch('/users/role/:id',verifyFBToken, verifyAdmin , async (req, res) => {
+        app.patch('/users/role/:id', verifyFBToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const { role } = req.body;
             const query = { _id: new ObjectId(id) }

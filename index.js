@@ -44,7 +44,7 @@ const verifyFBToken = async (req, res, next) => {
     try {
         const idToken = token.split(' ')[1];
         const decoded = await admin.auth().verifyIdToken(idToken);
-        console.log('decoded in the token', decoded);
+        //console.log('decoded in the token', decoded);
         req.decoded_email = decoded.email;
         next();
     }
@@ -77,6 +77,7 @@ async function run() {
         const BooksCollection = db.collection('AllBooks');
         const OrdersCollection = db.collection('orders');
         const PaymentCollection = db.collection('payments');
+        const wishCollection =db.collection('wish')
 
 
 
@@ -93,6 +94,23 @@ async function run() {
         }
 
 
+
+        //wish api 
+
+        app.post('/wishList',async(req,res)=>{
+            const wish = req.body;
+            const result = await wishCollection.insertOne(wish);
+            res.send(result)
+        })
+
+
+        app.get('/myWishList/:email',async(req,res)=>{
+            const email = req.params.email;
+            const query = { email };
+            const result = await wishCollection.find(query).toArray();
+            res.send(result)
+
+        })
 
 
         //payment related apis
@@ -126,10 +144,11 @@ async function run() {
             res.send({ url: session.url })
         })
 
-        const trackingId = generateTrackingId()
+        
 
         app.patch('/payment-success',verifyFBToken, async (req, res) => {
-            const sessionId = req.query.session_id;
+            try{
+                        const sessionId = req.query.session_id;
             const session = await stripe.checkout.sessions.retrieve(sessionId);
             //console.log(session)
 
@@ -137,7 +156,7 @@ async function run() {
             const query = { transactionId: transactionId }
 
             const paymentExist = await PaymentCollection.findOne(query);
-            // console.log(paymentExist);
+             console.log(paymentExist);
             if (paymentExist) {
 
                 return res.send({
@@ -148,19 +167,21 @@ async function run() {
             }
 
 
-
+            
             if (session.payment_status === 'paid') {
                 const id = session.metadata.orderId;
                 const query = { _id: new ObjectId(id) }
+                const order = await OrdersCollection.findOne(query);
                 const update = {
                     $set: {
                         paymentStatus: 'paid',
-                        trackingId: trackingId
+                        trackingId: order.trackingId
 
                     }
                 }
 
                 const result = await OrdersCollection.updateOne(query, update);
+                
 
                 const payment = {
                     amount: session.amount_total / 100,
@@ -174,24 +195,28 @@ async function run() {
                 }
 
 
-                if (session.payment_status === 'paid') {
+                
                     const resultPayment = await PaymentCollection.insertOne(payment)
                     res.send({
                         success: true,
                         modifyOrder: result,
-                        trackingId: trackingId,
+                        trackingId: order?.trackingId,
                         paymentInfo: resultPayment
                     })
-                }
+                
 
 
             }
-            res.send({ success: true })
+            res.send({ success: false })
+            }
+            catch(error){
+                console.log(error)
+            }
 
         })
 
         app.get('/payments', verifyFBToken, async (req, res) => {
-            const email = req.query.email;
+            const email = req.query.customerEmail;
             const query = {}
 
 
@@ -211,6 +236,8 @@ async function run() {
         //orders api
         app.post('/orders', async (req, res) => {
             const order = req.body;
+            const trackingId = generateTrackingId();
+            order.trackingId= trackingId;
             const result = await OrdersCollection.insertOne(order);
             res.send(result)
         })

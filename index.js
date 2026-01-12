@@ -321,42 +321,74 @@ async function run() {
 
 
 
-        app.get('/AllBooks', verifyFBToken, async (req, res) => {
-            const email = req.decoded_email;
+       app.get('/AllBooks', verifyFBToken, async (req, res) => {
+    const email = req.decoded_email;
+    const user = await UserCollection.findOne({ email });
 
-            const user = await UserCollection.findOne({ email });
+    if (!user) {
+        return res.status(403).send({ message: 'forbidden access' });
+    }
 
-            if (!user) {
-                return res.status(403).send({ message: 'forbidden access' });
-            }
+    // ===== Pagination Params =====
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 8;
+    const search = req.query.search || "";
+    const sort = req.query.sort || "";
 
-            let query = {};
-            const options = { sort: { createdAt: -1 } };
+    // ===== Base Query =====
+    let query = {
+        name: { $regex: search, $options: "i" }
+    };
 
-            // Librarian → only their books
-            if (user.role === 'librarian') {
-                query = { librarianEmail: email };
-            }
+    // Librarian → only own books
+    if (user.role === 'librarian') {
+        query.librarianEmail = email;
+    }
 
-            // Admin → ALL books (query stays empty)
-            if (user.role === 'admin') {
-                query = {};
-            }
+    // Admin → all books (no extra filter)
+    if (user.role === 'admin') {
+        delete query.librarianEmail;
+    }
 
-            const result = await BooksCollection.find(query, options).toArray();
-            res.send(result);
-        });
+    // ===== Sorting =====
+    let sortOption = { createdAt: -1 };
+    if (sort === "price") sortOption = { price: 1 };
+    if (sort === "pages") sortOption = { pages: 1 };
+
+    // ===== Total Count =====
+    const total = await BooksCollection.countDocuments(query);
+
+    // ===== Paginated Data =====
+    const books = await BooksCollection
+        .find(query)
+        .sort(sortOption)
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .toArray();
+
+    res.send({
+        total,
+        page,
+        limit,
+        books
+    });
+});
+
 
 
         app.get('/public/books', async (req, res) => {
             try {
-                const options = { sort: { createdAt: -1 } };
-                const books = await BooksCollection.find({}, options).toArray();
+                const limit = parseInt(req.query.limit) || 6; // default 6 if not specified
+                const books = await BooksCollection.find({})
+                    .sort({ createdAt: -1 }) // latest books first
+                    .limit(limit)             // only fetch 'limit' number of books
+                    .toArray();
                 res.send(books);
             } catch (error) {
                 res.status(500).send({ message: 'Failed to load books' });
             }
         });
+
 
 
 
